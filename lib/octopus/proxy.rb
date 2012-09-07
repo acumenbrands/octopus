@@ -166,6 +166,7 @@ class Octopus::Proxy
   end
 
   def method_missing(method, *args, &block)
+    clear_query_cache_if_needed(method)
     if should_clean_connection?(method)
       conn = select_connection()
       self.last_current_shard = self.current_shard
@@ -175,6 +176,27 @@ class Octopus::Proxy
       send_queries_to_selected_slave(method, *args, &block)
     else
       select_connection().send(method, *args, &block)
+    end
+  end
+
+  def cache
+    @shards.each do |k,v|
+      v.connection().instance_variable_set(:@query_cache_enabled, true)
+    end
+    yield
+  ensure
+    clear_query_cache()
+  end
+
+  def clear_query_cache_if_needed(method)
+    if [:update, :insert, :delete, :exec_insert, :exec_update, :exec_delete].include?(method)
+      clear_query_cache()
+    end
+  end
+
+  def clear_query_cache
+    @shards.each do |k,v|
+      v.connection().clear_query_cache()
     end
   end
 
